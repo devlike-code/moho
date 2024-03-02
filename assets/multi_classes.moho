@@ -1,0 +1,7 @@
+class ATestActor : AActor
+{
+}
+
+class BTestActor : AActor, BActor
+{
+}

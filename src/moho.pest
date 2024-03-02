@@ -1,0 +1,86 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+bool = { "true" | "false" }
+
+char = @{ "'" ~ ( (!"'" ~ ANY) )* ~ "'" }
+string = @{ "\"" ~ ( (!"\"" ~ ANY) )* ~ "\"" }
+
+any_digit = _{ '0'..'9' }
+non_zero_digit = _{ '1'..'9' }
+integer = { non_zero_digit ~ (any_digit | "_")* | "0" }
+
+plus  = { "+" }
+minus = { "-" }
+exp   = { ^"e" ~ (plus | minus)? ~ integer }
+float = { integer ~ "." ~ integer? ~ exp? | integer ~ exp }
+
+value = {
+    "nullptr" |
+    char |
+    bool |
+    float |
+    string |
+    integer
+}
+
+property = {
+    identifier ~ ("=" ~ value)?
+}
+
+properties = {
+    "[" ~ property ~ ("," ~ property)* ~ "]"
+}
+
+inheritance = {
+    identifier ~ ("," ~ identifier)*
+}
+
+name = {
+    identifier
+}
+
+class = {
+    properties? ~ "class" ~ name ~ (":" ~ inheritance)? ~ "{" ~ declaration* ~ "}"
+}
+
+body = _{ declaration* }
+
+declaration = {
+    properties? ~ (field_decl | block_decl)
+}
+
+field_decl = { 
+    type_decl ~ identifier ~ ("=" ~ value)? ~ ";"
+}
+
+block_decl = {
+    "{" ~ body ~ "}"
+}
+
+primitive_type = _{
+    identifier
+}
+
+ptr_spec = _{ "*" }
+ref_spec = _{ "&" }
+array_spec = _{ "[]" }
+matrix_spec = _{ "[][]" }
+
+pointer_type = { identifier ~ ptr_spec }
+reference_type = { identifier ~ ref_spec }
+array_type = { identifier ~ array_spec }
+matrix_type = { identifier ~ matrix_spec }
+
+type_decl = {
+    pointer_type |
+    reference_type |
+    matrix_type |
+    array_type |
+    primitive_type
+}
+
+moho = {
+    class+
+}

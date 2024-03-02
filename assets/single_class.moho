@@ -1,0 +1,27 @@
+[EditAnywhere, BlueprintReadWrite]
+class ATestActor : AActor
+{
+    [EditAnywhere, BlueprintReadWrite]
+    {
+        [Category="Object References"]
+        {
+            [Description="A nice long description goes here"]
+            AAnotherActor* AnotherActor;
+
+            [Description="Ugly af"]
+            AYetAnotherActor* YetAnother;
+        }
+
+        [Category="Settings"]
+        {
+            [ClampMin = 10, ClampMax = 15]
+            float MaxHealth = 10;
+        }
+    }
+
+    [BlueprintReadOnly, Transient]
+    {
+        [Description="Read only var"]
+        bool isTrue = false;
+    }
+}

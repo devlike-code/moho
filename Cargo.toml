@@ -1,0 +1,17 @@
+[package]
+name = "moho"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pest = "2.7.7"
+pest_derive = "2.7.7"
+
+string_template = "0.2.1"
+ariadne = "0.4.0"
+
+clap = { version = "3.1.6", features = ["derive"] }
+walkdir = "2.5.0"
+dirs = "5.0.1"
+
+rhai = "1.17.1"
