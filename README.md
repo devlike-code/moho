@@ -10,8 +10,9 @@ To use `moho`, create one or more `.moho` files and then run:
 moho -r <folder where your moho files are>
 ```
 
-This will generate `.h` and `.cpp` files within that folder next to the `.moho` files.
-Here's a sample for a `.moho` file:
+In this repo, you can run `moho -r ./test` to see the generated files.
+
+Calling `moho` will generate `.h` and `.cpp` files within that folder next to the `.moho` files. Here's a sample for a `.moho` file:
 
 ```
 class ATestActor : AActor
@@ -124,6 +125,14 @@ void ATestActor::Tick(float DeltaTime)
     Super::Tick(DeltaTime);
 }
 ```
+
+You can also use `moho` to create a new `.moho` file automatically by using the `-g` flag. Use `-n` to skip being prompted for a file name (optional).
+
+```
+moho -r <target folder> -g <superclass> [-n <your class name>]
+```
+
+The `-g` version of this command won't run the code generator after creating the file.
 
 ## Yes, but how does it _work_?
 

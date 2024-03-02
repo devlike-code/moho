@@ -1,16 +1,19 @@
+pub mod defaults;
 pub mod grammar;
 pub mod output;
 pub mod parser;
 
 use std::{
     ffi::{OsStr, OsString},
-    fs::{self},
+    fs,
+    io::{self, Write},
     path::PathBuf,
     process::Command,
-    thread::{self},
+    thread,
 };
 
 use clap::Parser;
+use defaults::copy_default_files;
 use dirs::config_dir;
 use output::{write_file, OutputTemplate, OutputWriter, StringWriter};
 use parser::{
@@ -22,7 +25,7 @@ use walkdir::WalkDir;
 #[clap(version)]
 /// Moho: a gamedev-oriented code generator
 pub struct Arguments {
-    #[clap(long, short, default_value_t = String::from("."))]
+    #[clap(long, short)]
     /// directory to run generation in
     pub run_path: String,
 
@@ -31,8 +34,18 @@ pub struct Arguments {
         .unwrap_or(String::from(".")))]
     /// directory to find Moho config
     pub moho_path: String,
+
     #[clap(short, long, action, default_value_t = false)]
+    /// open explorer to the moho config folder
     pub explore_configs: bool,
+
+    #[clap(short, long)]
+    /// generate a class of this superclass from the command line
+    pub generate_class: Option<String>,
+
+    #[clap(short)]
+    /// used in conjunction with --generate-class, names the new class without prompting
+    pub new_class_name: Option<String>,
 }
 
 impl Default for Arguments {
@@ -46,6 +59,8 @@ impl Default for Arguments {
                     .unwrap_or(String::from("."))
             ),
             explore_configs: false,
+            generate_class: None,
+            new_class_name: None,
         }
     }
 }
@@ -57,7 +72,7 @@ fn main() -> std::io::Result<()> {
     let moho_path = args.moho_path.clone();
     if std::fs::metadata(moho_path.as_str()).is_err() {
         std::fs::create_dir(moho_path.as_str())?;
-        create_file(append_to_path(moho_path, "empty.rhai"));
+        copy_default_files(&moho_path);
     }
 
     // If exploring, open explorer and quit.
@@ -66,6 +81,35 @@ fn main() -> std::io::Result<()> {
             .arg(args.moho_path)
             .spawn()
             .unwrap();
+        return Ok(());
+    }
+
+    if let Some(class) = args.generate_class {
+        println!("Creating class as a subclass of {}", class);
+        if std::fs::metadata(format!("{}\\{}.rhai", &moho_path, class)).is_err() {
+            println!("\n\tError: template {} not found. Quitting.", class);
+            return Ok(());
+        }
+
+        let name = if args.new_class_name.is_none() {
+            print!("  Class name: ");
+            let _ = io::stdout().flush();
+            {
+                let mut name = String::new();
+                io::stdin().read_line(&mut name).unwrap();
+                name.trim().to_string()
+            }
+        } else {
+            args.new_class_name.unwrap()
+        };
+
+        print!("Writing {}.moho... ", name);
+        let _ = io::stdout().flush();
+        let _ = fs::write(
+            format!("{}\\{}.moho", args.run_path, name),
+            format!("class {} : {}\n{{\n\n}}\n", name, class),
+        );
+        println!("Done!");
         return Ok(());
     }
 

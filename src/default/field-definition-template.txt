@@ -1,0 +1,4 @@
+	{{type}}& Get{{name}}() const { return {{var}}; }
+	const {{type}}& Get{{name}}() const { return {{var}}; }
+	void Set{{name}}({{type}}& value) { {{var}} = value; }
+
