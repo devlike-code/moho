@@ -1,10 +1,26 @@
+use std::fmt::Display;
+
 use pest::{
     error::LineColLocation,
     iterators::{Pair, Pairs},
     Parser, Span,
 };
 
-use crate::ast::{MohoAST, Rule};
+use crate::grammar::{MohoGrammar, Rule};
+
+macro_rules! rhai_print {
+    ($name:ident) => {
+        impl $name {
+            pub fn to_print(&mut self) -> String {
+                format!("{:?}", self)
+            }
+
+            pub fn to_debug(&mut self) -> String {
+                format!("{:?}", self)
+            }
+        }
+    };
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
@@ -15,6 +31,57 @@ pub enum Value {
     Float(f64),
     Str(String),
     Integer(isize),
+}
+
+impl Value {
+    pub fn pure(&mut self) -> String {
+        match self {
+            Value::Default => "default".into(),
+            Value::Nullptr => "nullptr".into(),
+            Value::Char(_) => "char".into(),
+            Value::Bool(_) => "bool".into(),
+            Value::Float(_) => "float".into(),
+            Value::Str(_) => "string".into(),
+            Value::Integer(_) => "integer".into(),
+        }
+    }
+
+    pub fn is_empty(&mut self) -> bool {
+        matches!(self, Value::Default)
+    }
+
+    pub fn print(&mut self) -> String {
+        format!("{}", self)
+    }
+}
+impl rhai::CustomType for Value {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Value")
+            .with_fn("pure", Value::pure)
+            .with_fn("as_value", Value::print)
+            .with_fn("is_empty", Value::is_empty)
+            .on_debug(|s| format!("{:?}", s))
+            .on_print(|s| format!("{:?}", s));
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            match self {
+                Value::Default => "(*void)0".into(),
+                Value::Nullptr => "nullptr".into(),
+                Value::Char(c) => format!("(char){}", *c),
+                Value::Bool(true) => "true".into(),
+                Value::Bool(false) => "false".into(),
+                Value::Float(f) => format!("{}", *f),
+                Value::Str(s) => s.clone(),
+                Value::Integer(i) => format!("{}", *i),
+            }
+            .as_str(),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -32,10 +99,75 @@ pub enum Type {
     Class(String),
 }
 
+impl Type {
+    pub fn is_primitive(&mut self) -> bool {
+        matches!(
+            self,
+            Type::None | Type::Char | Type::Bool | Type::Float | Type::String | Type::Integer
+        )
+    }
+
+    pub fn pure(&mut self) -> String {
+        match self {
+            Type::None => "none".into(),
+            Type::Char => "char".into(),
+            Type::Bool => "bool".into(),
+            Type::Float => "float".into(),
+            Type::String => "string".into(),
+            Type::Integer => "integer".into(),
+            Type::Array(_) => "array".into(),
+            Type::Matrix(_) => "matrix".into(),
+            Type::Pointer(_) => "pointer".into(),
+            Type::Reference(_) => "reference".into(),
+            Type::Class(c) => c.clone(),
+        }
+    }
+
+    pub fn inner(&mut self) -> Type {
+        match self {
+            Type::Array(b) => b.as_ref().clone(),
+            Type::Matrix(m) => m.as_ref().clone(),
+            Type::Pointer(p) => p.as_ref().clone(),
+            Type::Reference(r) => r.as_ref().clone(),
+            _ => unreachable!("`inner` should never be called on primitive types"),
+        }
+    }
+}
+
+impl rhai::CustomType for Type {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Type")
+            .with_fn("pure", Type::pure)
+            .with_fn("inner", Type::inner)
+            .with_fn("is_primitive", Type::is_primitive)
+            .on_debug(|s| format!("{:?}", s))
+            .on_print(|s| format!("{:?}", s));
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Property {
     pub name: String,
     pub value: Option<Value>,
+}
+
+impl rhai::CustomType for Property {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Property")
+            .with_get("name", Property::get_name)
+            .with_get("value", Property::get_value);
+    }
+}
+impl Property {
+    pub fn get_name(&mut self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_value(&mut self) -> Option<Value> {
+        self.value.clone()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +175,8 @@ pub enum Declaration {
     Block(Block),
     Field(Field),
 }
+
+rhai_print!(Declaration);
 
 #[derive(Debug, Clone)]
 pub struct Field {
@@ -52,10 +186,124 @@ pub struct Field {
     pub value: Option<Value>,
 }
 
+rhai_print!(Field);
+
+impl rhai::CustomType for Field {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Field")
+            .with_get("properties", Field::get_properties)
+            .with_get("name", Field::get_name)
+            .with_get("type", Field::get_type)
+            .with_get("value", Field::get_value)
+            .on_debug(|s| format!("{:?}", s))
+            .on_print(|s| format!("{:?}", s));
+    }
+}
+
+impl Field {
+    pub fn get_properties(&mut self) -> Vec<Property> {
+        self.properties.clone()
+    }
+
+    pub fn get_name(&mut self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_type(&mut self) -> Type {
+        self.typ.clone()
+    }
+
+    pub fn get_value(&mut self) -> Value {
+        match self.value.as_ref() {
+            Some(v) => v.clone(),
+            None => Value::Default,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Block {
     pub properties: Vec<Property>,
     pub inner: Vec<Declaration>,
+}
+
+rhai_print!(Block);
+
+impl rhai::CustomType for Block {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Block")
+            .with_get("properties", Block::get_properties)
+            .with_get("inner", Block::get_inner)
+            .with_get("fields", Block::fields);
+    }
+}
+
+impl Block {
+    pub fn get_properties(&mut self) -> Vec<Property> {
+        self.properties.clone()
+    }
+
+    pub fn get_inner(&mut self) -> Vec<Declaration> {
+        self.inner.clone()
+    }
+
+    fn normalize_fields_rec(&self, upper_props: Vec<Property>) -> Vec<Field> {
+        let mut fields = self
+            .inner
+            .clone()
+            .into_iter()
+            .filter_map(|d| match d {
+                Declaration::Field(f) => Some(f),
+                _ => None,
+            })
+            .map(|f| {
+                let mut props = vec![];
+                props.extend(upper_props.clone());
+                props.extend(self.properties.clone());
+                props.extend(f.properties);
+
+                Field {
+                    properties: props,
+                    name: f.name,
+                    typ: f.typ,
+                    value: f.value,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let sub = self
+            .inner
+            .clone()
+            .into_iter()
+            .filter_map(|d| match d {
+                Declaration::Block(b) => Some(b),
+                _ => None,
+            })
+            .flat_map(|b| {
+                let mut props = vec![];
+                props.extend(upper_props.clone());
+                props.extend(self.properties.clone());
+                b.normalize_fields_rec(props)
+            })
+            .collect::<Vec<_>>();
+
+        fields.extend(sub);
+        fields
+    }
+
+    pub fn normalize(&self) -> Block {
+        let fields = self.normalize_fields_rec(vec![]);
+        Block {
+            properties: vec![],
+            inner: fields.into_iter().map(Declaration::Field).collect(),
+        }
+    }
+
+    pub fn fields(&mut self) -> Vec<Field> {
+        self.normalize_fields_rec(vec![])
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +311,32 @@ pub struct Class {
     pub name: String,
     pub inherit: Vec<String>,
     pub inner: Block,
+}
+
+rhai_print!(Class);
+
+impl rhai::CustomType for Class {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Class")
+            .with_get("name", Class::get_name)
+            .with_get("inherit", Class::get_inherit)
+            .with_get("inner", Class::get_inner);
+    }
+}
+
+impl Class {
+    pub fn get_name(&mut self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_inherit(&mut self) -> Vec<String> {
+        self.inherit.clone()
+    }
+
+    pub fn get_inner(&mut self) -> Block {
+        self.inner.clone()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +359,7 @@ pub enum MohoError<'a> {
 impl MohoParser {
     pub fn apply(input: &str) -> Result<TranslationUnit, MohoError> {
         let mut result = vec![];
-        match MohoAST::parse(Rule::moho, input) {
+        match MohoGrammar::parse(Rule::moho, input) {
             Ok(parsed) => {
                 for pair in parsed {
                     for class in pair.into_inner() {

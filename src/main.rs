@@ -1,4 +1,5 @@
-pub mod ast;
+pub mod grammar;
+pub mod output;
 pub mod parser;
 
 use std::{
@@ -11,7 +12,10 @@ use std::{
 
 use clap::Parser;
 use dirs::config_dir;
-use parser::{Class, MohoParser};
+use output::{write_file, OutputTemplate, OutputWriter, StringWriter};
+use parser::{
+    Block, Class, Declaration, Field, MohoParser, Property, TranslationUnit, Type, Value,
+};
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -91,15 +95,41 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn append_to_path(p: impl Into<OsString>, s: impl AsRef<OsStr>) -> PathBuf {
+fn append_to_path(p: impl Into<OsString>, s: impl AsRef<OsStr>) -> String {
     let mut p = p.into();
     p.push("\\");
     p.push(s);
-    p.into()
+    let pathbuf: PathBuf = p.into();
+    pathbuf
+        .into_os_string()
+        .into_string()
+        .expect("Should be able to open path")
 }
 
-fn create_file(p: PathBuf) {
+fn create_file(p: String) {
     let _ = fs::File::create(p).expect("Cannot create file, panicking!");
+}
+
+fn join_string_array(v: Vec<String>) -> String {
+    v.join(", ")
+}
+
+fn join_property_array(v: Vec<Property>) -> String {
+    join_string_array(
+        v.iter()
+            .map(|p| {
+                if p.value.is_some() {
+                    format!("{}={}", p.name, p.value.as_ref().unwrap())
+                } else {
+                    p.name.to_string()
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn any_string_in_array(v: Vec<String>) -> bool {
+    !v.is_empty()
 }
 
 fn run_moho(path: PathBuf, moho_path: PathBuf) {
@@ -117,24 +147,66 @@ fn run_moho(path: PathBuf, moho_path: PathBuf) {
 
     let mut engine = rhai::Engine::new();
     engine.register_fn("create_file", create_file);
+    engine.register_fn("write_file", write_file);
+    engine.register_fn("join", join_string_array);
+    engine.register_fn("join", join_property_array);
+    engine.register_fn("any", any_string_in_array);
+    engine.build_type::<OutputWriter>();
+    engine.build_type::<StringWriter>();
+    engine.build_type::<OutputTemplate>();
+    engine.build_type::<Class>();
+    engine.build_type::<Block>();
+    engine.build_type::<Property>();
+    engine.build_type::<Field>();
+    engine.build_type::<Type>();
+    engine.build_type::<Value>();
 
+    engine.register_iterator::<Vec<String>>();
+    engine.register_iterator::<Vec<Block>>();
+    engine.register_iterator::<Vec<Field>>();
+    engine.register_iterator::<Vec<Property>>();
+    engine.register_iterator::<Vec<Declaration>>();
+
+    engine.register_type_with_name::<Declaration>("Declaration");
+    engine.register_type_with_name::<TranslationUnit>("TranslationUnit");
     let mut scope = rhai::Scope::new();
 
+    scope.push(
+        "Output",
+        OutputWriter::new(source_dir.clone(), moho_path.clone()),
+    );
     scope.push_constant(
         "Filename",
         path.clone().file_name().map(|f| f.to_owned()).unwrap(),
     );
-    scope.push_constant("Path", source_dir);
+    scope.push_constant(
+        "Path",
+        source_dir
+            .canonicalize()
+            .unwrap()
+            .as_os_str()
+            .to_os_string()
+            .into_string()
+            .unwrap(),
+    );
 
-    for Class {
-        name,
-        inherit,
-        inner,
-    } in translation_unit.0
-    {
-        scope.push_constant("Name", name);
-        scope.push_constant("Inherit", inherit.clone());
-        scope.push_constant("Class", inner);
+    for class in translation_unit.0 {
+        let Class {
+            name,
+            inherit,
+            inner,
+        } = class.clone();
+
+        scope.push_constant("Input", inner.clone().fields());
+        scope.push_constant("Name", name.clone());
+        scope.push_constant("ClassProperties", inner.properties.clone());
+        scope.push_constant("Inherit", inherit.first().cloned());
+
+        let mut tail = inherit.clone();
+        tail.reverse();
+        tail.pop();
+        tail.reverse();
+        scope.push_constant("OtherInherits", tail);
 
         let script_file = append_to_path(
             moho_path.clone(),
@@ -142,11 +214,17 @@ fn run_moho(path: PathBuf, moho_path: PathBuf) {
                 .first()
                 .cloned()
                 .map(|f| f + ".rhai")
-                .unwrap_or("empty.rhai".to_string()),
+                .unwrap_or("base.rhai".to_string()),
         );
 
-        if let Err(result) = engine.run_file_with_scope(&mut scope, script_file) {
-            println!("Failed to moho: {:?}", result);
+        if let Err(result) = engine.run_file_with_scope(&mut scope, PathBuf::from(script_file)) {
+            println!(
+                "Failed to execute moho on file {}: {:?}",
+                name.clone(),
+                result
+            );
+
+            return;
         }
     }
 }

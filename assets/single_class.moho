@@ -1,5 +1,4 @@
-[EditAnywhere, BlueprintReadWrite]
-class ATestActor : AActor
+class ATestActor : AActor, BActor
 {
     [EditAnywhere, BlueprintReadWrite]
     {
