@@ -129,6 +129,7 @@ impl Type {
             Type::Matrix(m) => m.as_ref().clone(),
             Type::Pointer(p) => p.as_ref().clone(),
             Type::Reference(r) => r.as_ref().clone(),
+            Type::Class(s) => self.clone(),
             _ => unreachable!("`inner` should never be called on primitive types"),
         }
     }

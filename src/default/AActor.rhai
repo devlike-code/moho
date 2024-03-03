@@ -39,7 +39,13 @@ for (field, count) in Input {
     // we are currently running with a limited type-system
     // distinguishing primitive types and a couple of complex ones
     // that we template by hand (every complex type has its own template)
-    let type_part = Output.part("type-template-" + field.type.pure() + ".txt");
+
+    let template = "type-template-" + field.type.pure() + ".txt";
+    if !Output.has_part(template) {
+        template = "type-template-class.txt";
+    }
+
+    let type_part = Output.part(template);
     if field.type.is_primitive() {
         type_part.put("type", field.type.to_string());
     } else {
@@ -71,7 +77,12 @@ for (field, count) in Input {
     name_part.put("name", field.name);
     field_part.put("var", name_part.finish());
 
-    let type_part = Output.part("type-template-" + field.type.pure() + ".txt");
+    let template = "type-template-" + field.type.pure() + ".txt";
+    if !Output.has_part(template) {
+        template = "type-template-class.txt";
+    }
+    
+    let type_part = Output.part(template);
     if field.type.is_primitive() {
         type_part.put("type", field.type.to_string());
     } else {

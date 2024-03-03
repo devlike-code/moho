@@ -25,7 +25,7 @@ use walkdir::WalkDir;
 #[clap(version)]
 /// Moho: a gamedev-oriented code generator
 pub struct Arguments {
-    #[clap(long, short)]
+    #[clap(index = 1)]
     /// directory to run generation in
     pub run_path: String,
 

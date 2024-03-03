@@ -5,22 +5,7 @@ class ATestActor : AActor
         [Category="Object References"]
         {
             [Description="A nice long description goes here"]
-            AAnotherActor* AnotherActor;
-
-            [Description="Ugly af"]
-            AYetAnotherActor* YetAnother;
+            AAnotherActor AnotherActor;
         }
-
-        [Category="Settings"]
-        {
-            [ClampMin = 10, ClampMax = 15]
-            float MaxHealth = 10;
-        }
-    }
-
-    [BlueprintReadOnly, Transient]
-    {
-        [Description="Read only var"]
-        bool IsTrue = false;
     }
 }

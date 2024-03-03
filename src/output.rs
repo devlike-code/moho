@@ -72,6 +72,11 @@ impl OutputWriter {
         self.text.clone()
     }
 
+    pub fn has_template(&mut self, temp: String) -> bool {
+        let file = format!("{}\\{}", self.config_path, temp);
+        fs::metadata(file).is_ok()
+    }
+
     pub fn template_from_file(&mut self, temp: String) -> OutputTemplate {
         let file = format!("{}\\{}", self.config_path, temp);
         OutputTemplate {
@@ -103,6 +108,7 @@ impl CustomType for OutputWriter {
         builder
             .with_name("OutputWriter")
             .with_fn("add", OutputWriter::add)
+            .with_fn("has_part", OutputWriter::has_template)
             .with_fn("part", OutputWriter::template_from_file)
             .with_fn("embed", OutputWriter::embed)
             .with_fn("write_to", OutputWriter::write_to)
