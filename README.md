@@ -272,3 +272,7 @@ Output.embed(actor_part);
 // We write the output into a file
 Output.write_to(Name + ".h");
 ```
+
+## Something undefined?
+
+First run `moho --help` to check whether that may help you. Then ping me or open a new issue!
