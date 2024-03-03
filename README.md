@@ -10,7 +10,7 @@ To use `moho`, create one or more `.moho` files and then run:
 moho -r <folder where your moho files are>
 ```
 
-In this repo, you can run `moho -r ./test` to see the generated files.
+In this repo, you can run `moho -r ./test` to see the generated files. If running from a developer view, replace the command with `cargo run -- -r ./test`.
 
 Calling `moho` will generate `.h` and `.cpp` files within that folder next to the `.moho` files. Here's a sample for a `.moho` file:
 
