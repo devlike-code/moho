@@ -7,10 +7,10 @@ Moho (spanish for "rust") is a rust-based code generator for creating Unreal Eng
 To use `moho`, create one or more `.moho` files and then run:
 
 ```
-moho -r <folder where your moho files are>
+moho <folder where your moho files are>
 ```
 
-In this repo, you can run `moho -r ./test` to see the generated files.
+In this repo, you can run `moho ./test` to see the generated files.
 
 Calling `moho` will generate `.h` and `.cpp` files within that folder next to the `.moho` files. Here's a sample for a `.moho` file:
 
@@ -129,7 +129,7 @@ void ATestActor::Tick(float DeltaTime)
 You can also use `moho` to create a new `.moho` file automatically by using the `-g` flag. Use `-n` to skip being prompted for a file name (optional).
 
 ```
-moho -r <target folder> -g <superclass> [-n <your class name>]
+moho <target folder> -g <superclass> [-n <your class name>]
 ```
 
 The `-g` version of this command won't run the code generator after creating the file.
