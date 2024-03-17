@@ -17,14 +17,14 @@ use defaults::copy_default_files;
 use dirs::config_dir;
 use output::{write_file, OutputTemplate, OutputWriter, StringWriter};
 use parser::{
-    Block, Class, Declaration, Field, MohoParser, Property, TranslationUnit, Type, Value,
+    Argument, Block, Class, Declaration, Field, Method, MohoParser, Property, TranslationUnit, Type, Value
 };
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
 #[clap(version)]
 /// Moho: a gamedev-oriented code generator
-pub struct Arguments {
+pub struct CmdArguments {
     #[clap(index = 1)]
     /// directory to run generation in
     pub run_path: String,
@@ -48,7 +48,7 @@ pub struct Arguments {
     pub new_class_name: Option<String>,
 }
 
-impl Default for Arguments {
+impl Default for CmdArguments {
     fn default() -> Self {
         Self {
             run_path: ".".into(),
@@ -66,7 +66,7 @@ impl Default for Arguments {
 }
 
 fn main() -> std::io::Result<()> {
-    let args = Arguments::parse();
+    let args = CmdArguments::parse();
 
     // Create moho directory if missing
     let moho_path = args.moho_path.clone();
@@ -204,10 +204,14 @@ fn run_moho(path: PathBuf, moho_path: PathBuf) {
     engine.build_type::<Field>();
     engine.build_type::<Type>();
     engine.build_type::<Value>();
+    engine.build_type::<Method>();
+    engine.build_type::<Argument>();
 
     engine.register_iterator::<Vec<String>>();
     engine.register_iterator::<Vec<Block>>();
     engine.register_iterator::<Vec<Field>>();
+    engine.register_iterator::<Vec<Method>>();
+    engine.register_iterator::<Vec<Argument>>();
     engine.register_iterator::<Vec<Property>>();
     engine.register_iterator::<Vec<Declaration>>();
 
@@ -241,7 +245,8 @@ fn run_moho(path: PathBuf, moho_path: PathBuf) {
             inner,
         } = class.clone();
 
-        scope.push_constant("Input", inner.clone().fields());
+        scope.push_constant("Fields", inner.clone().fields());
+        scope.push_constant("Methods", inner.clone().methods());
         scope.push_constant("Name", name.clone());
         scope.push_constant("ClassProperties", inner.properties.clone());
         scope.push_constant("Inherit", inherit.first().cloned());

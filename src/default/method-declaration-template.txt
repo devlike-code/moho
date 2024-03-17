@@ -1,0 +1,3 @@
+    UFUNCTION({{properties}}, meta=({{meta}}))
+    {{type}} {{name}}({{arguments}});
+

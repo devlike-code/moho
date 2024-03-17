@@ -24,4 +24,5 @@ private:
 
 public:
 {{field_definitions_and_accessors}}
+{{method_definitions}}
 };

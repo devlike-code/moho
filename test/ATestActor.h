@@ -31,4 +31,8 @@ public:
 	void SetAnotherActor(AAnotherActor& value) { m_AnotherActor = value; }
 
 
+    UFUNCTION(BlueprintPure, Category="Game", meta=(WorldContext="WorldContextObject", UnsafeDuringActorConstruction="true"))
+    APawn* GetPlayerPawn(const UObject* WorldContextObject, int32 PlayerIndex);
+
+
 };

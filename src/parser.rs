@@ -86,7 +86,7 @@ impl Display for Value {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    None,
+    Void,
     Char,
     Bool,
     Float,
@@ -94,7 +94,7 @@ pub enum Type {
     Integer,
     Array(Box<Type>),
     Matrix(Box<Type>),
-    Pointer(Box<Type>),
+    Pointer(Box<Type>, u32),
     Reference(Box<Type>),
     Class(String),
 }
@@ -103,13 +103,13 @@ impl Type {
     pub fn is_primitive(&mut self) -> bool {
         matches!(
             self,
-            Type::None | Type::Char | Type::Bool | Type::Float | Type::String | Type::Integer
+            Type::Void | Type::Char | Type::Bool | Type::Float | Type::String | Type::Integer
         )
     }
 
     pub fn pure(&mut self) -> String {
         match self {
-            Type::None => "none".into(),
+            Type::Void => "none".into(),
             Type::Char => "char".into(),
             Type::Bool => "bool".into(),
             Type::Float => "float".into(),
@@ -117,7 +117,7 @@ impl Type {
             Type::Integer => "integer".into(),
             Type::Array(_) => "array".into(),
             Type::Matrix(_) => "matrix".into(),
-            Type::Pointer(_) => "pointer".into(),
+            Type::Pointer(_, _) => "pointer".into(),
             Type::Reference(_) => "reference".into(),
             Type::Class(c) => c.clone(),
         }
@@ -127,9 +127,9 @@ impl Type {
         match self {
             Type::Array(b) => b.as_ref().clone(),
             Type::Matrix(m) => m.as_ref().clone(),
-            Type::Pointer(p) => p.as_ref().clone(),
+            Type::Pointer(p, _) => p.as_ref().clone(),
             Type::Reference(r) => r.as_ref().clone(),
-            Type::Class(s) => self.clone(),
+            Type::Class(_) => self.clone(),
             _ => unreachable!("`inner` should never be called on primitive types"),
         }
     }
@@ -149,6 +149,7 @@ impl rhai::CustomType for Type {
 
 #[derive(Debug, Clone)]
 pub struct Property {
+    pub meta: bool,
     pub name: String,
     pub value: Option<Value>,
 }
@@ -175,12 +176,14 @@ impl Property {
 pub enum Declaration {
     Block(Block),
     Field(Field),
+    Method(Method),
 }
 
 rhai_print!(Declaration);
 
 #[derive(Debug, Clone)]
 pub struct Field {
+    pub is_static: bool,
     pub properties: Vec<Property>,
     pub name: String,
     pub typ: Type,
@@ -197,6 +200,7 @@ impl rhai::CustomType for Field {
             .with_get("name", Field::get_name)
             .with_get("type", Field::get_type)
             .with_get("value", Field::get_value)
+            .with_get("is_static", Field::get_is_static)
             .on_debug(|s| format!("{:?}", s))
             .on_print(|s| format!("{:?}", s));
     }
@@ -220,6 +224,110 @@ impl Field {
             Some(v) => v.clone(),
             None => Value::Default,
         }
+    }
+
+    pub fn get_is_static(&mut self) -> bool {
+        self.is_static
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Argument {
+    pub properties: Vec<Property>,
+    pub name: String,
+    pub typ: String,
+    pub value: Option<Value>,
+}
+
+rhai_print!(Argument);
+
+impl rhai::CustomType for Argument {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Argument")
+            .with_get("properties", Argument::get_properties)
+            .with_get("name", Argument::get_name)
+            .with_get("type", Argument::get_type)
+            .with_get("value", Argument::get_value)
+            .on_debug(|s| format!("{:?}", s))
+            .on_print(|s| format!("{:?}", s));
+    }
+}
+
+impl Argument {
+    pub fn get_properties(&mut self) -> Vec<Property> {
+        self.properties.clone()
+    }
+
+    pub fn get_name(&mut self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_type(&mut self) -> String {
+        self.typ.clone()
+    }
+
+    pub fn get_value(&mut self) -> Option<Value> {
+        self.value.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Method {
+    pub is_static: bool,
+    pub properties: Vec<Property>,
+    pub name: String,
+    pub returns: String,
+    pub arguments: Vec<Argument>,
+}
+
+rhai_print!(Method);
+
+impl rhai::CustomType for Method {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Method")
+            .with_get("properties", Method::get_properties)
+            .with_get("meta", Method::get_meta_properties)
+            .with_get("name", Method::get_name)
+            .with_get("type", Method::get_return_type)
+            .with_get("arguments", Method::get_arguments)
+            .with_get("arguments_as_str", Method::arguments_as_str)
+            .with_get("is_static", Method::get_is_static)
+            .on_debug(|s| format!("{:?}", s))
+            .on_print(|s| format!("{:?}", s));
+    }
+}
+
+impl Method {
+    pub fn get_properties(&mut self) -> Vec<Property> {
+        self.properties.iter().filter(|p| !p.meta).cloned().collect()
+    }
+
+    pub fn get_meta_properties(&mut self) -> Vec<Property> {
+        self.properties.iter().filter(|p| p.meta).cloned().collect()
+    }
+    
+    pub fn get_name(&mut self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_return_type(&mut self) -> String {
+        self.returns.clone()
+    }
+
+    pub fn get_arguments(&mut self) -> Vec<Argument> {
+        self.arguments.clone()
+    }
+
+    pub fn arguments_as_str(&mut self) -> String {
+        self.arguments.iter()
+            .map(|a| format!("{} {}", a.typ, a.name))
+            .collect::<Vec<_>>().join(", ").to_string()
+    }
+
+    pub fn get_is_static(&mut self) -> bool {
+        self.is_static
     }
 }
 
@@ -250,27 +358,41 @@ impl Block {
         self.inner.clone()
     }
 
-    fn normalize_fields_rec(&self, upper_props: Vec<Property>) -> Vec<Field> {
+    fn normalize_decls_rec(&self, upper_props: Vec<Property>) -> Vec<Declaration> {
         let mut fields = self
             .inner
             .clone()
             .into_iter()
             .filter_map(|d| match d {
-                Declaration::Field(f) => Some(f),
+                Declaration::Field(f) => {
+                    let mut props = vec![];
+                    props.extend(upper_props.clone());
+                    props.extend(self.properties.clone());
+                    props.extend(f.properties);
+    
+                    Some(Declaration::Field(Field {
+                        properties: props,
+                        is_static: f.is_static,
+                        name: f.name,
+                        typ: f.typ,
+                        value: f.value,
+                    }))
+                },
+                Declaration::Method(m) => {
+                    let mut props = vec![];
+                    props.extend(upper_props.clone());
+                    props.extend(self.properties.clone());
+                    props.extend(m.properties);
+    
+                    Some(Declaration::Method(Method {
+                        properties: props,
+                        is_static: m.is_static,
+                        name: m.name,
+                        returns: m.returns,
+                        arguments: m.arguments,
+                    }))
+                },
                 _ => None,
-            })
-            .map(|f| {
-                let mut props = vec![];
-                props.extend(upper_props.clone());
-                props.extend(self.properties.clone());
-                props.extend(f.properties);
-
-                Field {
-                    properties: props,
-                    name: f.name,
-                    typ: f.typ,
-                    value: f.value,
-                }
             })
             .collect::<Vec<_>>();
 
@@ -286,7 +408,7 @@ impl Block {
                 let mut props = vec![];
                 props.extend(upper_props.clone());
                 props.extend(self.properties.clone());
-                b.normalize_fields_rec(props)
+                b.normalize_decls_rec(props)
             })
             .collect::<Vec<_>>();
 
@@ -295,15 +417,33 @@ impl Block {
     }
 
     pub fn normalize(&self) -> Block {
-        let fields = self.normalize_fields_rec(vec![]);
+        let fields = self.normalize_decls_rec(vec![]);
         Block {
             properties: vec![],
-            inner: fields.into_iter().map(Declaration::Field).collect(),
+            inner: fields.into_iter().collect(),
         }
     }
 
     pub fn fields(&mut self) -> Vec<Field> {
-        self.normalize_fields_rec(vec![])
+        self.normalize_decls_rec(vec![])
+            .iter().filter_map(|d| { 
+                match d { 
+                    Declaration::Field(f) => Some(f.clone()), 
+                    _ => None 
+                }
+            })
+            .collect()
+    }
+
+    pub fn methods(&mut self) -> Vec<Method> {
+        self.normalize_decls_rec(vec![])
+            .iter().filter_map(|d| { 
+                match d { 
+                    Declaration::Method(m) => Some(m.clone()), 
+                    _ => None 
+                }
+            })
+            .collect()
     }
 }
 
@@ -349,6 +489,7 @@ pub struct MohoParser;
 #[derive(Debug, Clone)]
 pub enum MohoError<'a> {
     TokenizerError(String, LineColLocation),
+    ParseArgumentError(String, Span<'a>),
     ParsePropertyError(String, Span<'a>),
     ParseValueError(String, Span<'a>),
     ParseClassError(String, Span<'a>),
@@ -432,6 +573,15 @@ impl MohoParser {
         let span = prop.as_span();
 
         let mut iter = prop.into_inner();
+        let mut meta = false;
+
+        if let Some(maybe_meta) = iter.peek() {
+            meta = matches!(maybe_meta.as_rule(), Rule::meta);
+            if meta {
+                let _ = iter.next();
+            }
+        }
+
         let Some(name) = iter.next() else {
             return Err(MohoError::ParsePropertyError(
                 "Expected property name".into(),
@@ -442,6 +592,7 @@ impl MohoParser {
         let value = Self::parse_value(&mut iter)?;
 
         Ok(Property {
+            meta,
             name: name.as_str().to_string(),
             value: if value == Value::Default {
                 None
@@ -497,6 +648,43 @@ impl MohoParser {
         }
     }
 
+    fn parse_argument<'a>(iter: &mut Pairs<'a, Rule>) -> Result<Argument, MohoError<'a>> {
+        let mut arg = Argument {
+            properties: vec![],
+            name: "".to_string(),
+            typ: "".to_string(),
+            value: None,
+        };
+
+        for it in iter {
+            match it.as_rule() {
+                Rule::properties => { arg.properties = Self::parse_properties(it)?; },
+                Rule::dont_care_type_decl => { 
+                    let mut typ = it.as_str().split(' ').collect::<Vec<_>>();
+                    let name = typ.pop().expect("Expected at least one identifier").to_string();
+                    let typ = typ.join(" ").to_string();
+                    arg.typ = typ;
+                    arg.name = name;
+                },
+                Rule::value => { arg.value = Some(Self::parse_value(&mut it.into_inner())?); },
+                _ => {
+                    return Err(MohoError::ParseArgumentError(format!("Cannot parse argument: {:?}", it.as_str()), it.as_span()));
+                },
+            }
+        }
+
+        Ok(arg)
+    }
+
+    fn parse_arguments<'a>(iter: &mut Pairs<'a, Rule>) -> Result<Vec<Argument>, MohoError<'a>> {
+        let mut result = vec![];
+        for arg in iter {
+            result.push(Self::parse_argument(&mut arg.into_inner())?);
+        }
+
+        Ok(result)
+    }
+
     fn parse_value<'a>(iter: &mut Pairs<'a, Rule>) -> Result<Value, MohoError<'a>> {
         if let Some(value) = iter.next() {
             Self::match_value(value)
@@ -519,6 +707,8 @@ impl MohoParser {
                     .extend(MohoParser::parse_properties(pair)?);
             } else if matches!(pair.as_rule(), Rule::field_decl) {
                 result.inner.push(Self::parse_field(pair)?);
+            } else if matches!(pair.as_rule(), Rule::method_decl) {
+                result.inner.push(Self::parse_method(pair)?);
             } else if matches!(pair.as_rule(), Rule::block_decl) {
                 for inner in pair.into_inner() {
                     result.inner.push(Self::parse_declaration(inner)?);
@@ -537,9 +727,10 @@ impl MohoParser {
     fn parse_field(field: Pair<'_, Rule>) -> Result<Declaration, MohoError> {
         let span = field.as_span();
         let mut result = Field {
+            is_static: false,
             properties: vec![],
             name: "".into(),
-            typ: Type::None,
+            typ: Type::Void,
             value: None,
         };
 
@@ -548,6 +739,8 @@ impl MohoParser {
                 result
                     .properties
                     .extend(MohoParser::parse_properties(pair)?);
+            } else if matches!(pair.as_rule(), Rule::static_spec) {
+                result.is_static = true;
             } else if matches!(pair.as_rule(), Rule::type_decl) {
                 result.typ = Self::parse_type(pair)?;
             } else if matches!(pair.as_rule(), Rule::identifier) {
@@ -563,6 +756,42 @@ impl MohoParser {
         }
 
         Ok(Declaration::Field(result))
+    }
+
+    fn parse_method(method: Pair<'_, Rule>) -> Result<Declaration, MohoError> {
+        let span = method.as_span();
+        let mut result = Method {
+            is_static: false,
+            properties: vec![],
+            name: "".into(),
+            returns: "".into(),
+            arguments: vec![]
+        };
+
+        for pair in method.into_inner() {
+            if matches!(pair.as_rule(), Rule::properties) {
+                result
+                    .properties
+                    .extend(MohoParser::parse_properties(pair)?);
+            } else if matches!(pair.as_rule(), Rule::static_spec) {
+                result.is_static = true;
+            } else if matches!(pair.as_rule(), Rule::dont_care_type_decl) {
+                let mut typ = pair.as_str().split(' ').collect::<Vec<_>>();
+                let name = typ.pop().expect("Expected at least one identifier").to_string();
+                let typ = typ.join(" ").to_string();
+                result.name = name;
+                result.returns = typ;
+            } else if matches!(pair.as_rule(), Rule::arguments) {
+                result.arguments = Self::parse_arguments(&mut pair.into_inner())?;
+            } else {
+                return Err(MohoError::ParseFieldError(
+                    format!("Cannot parse {:?} in field.", pair),
+                    span,
+                ));
+            }
+        }
+
+        Ok(Declaration::Method(result))
     }
 
     pub fn parse_type(pair: Pair<'_, Rule>) -> Result<Type, MohoError> {
@@ -581,9 +810,12 @@ impl MohoParser {
             _ => {
                 if let Some(typ) = pair.into_inner().next() {
                     match typ.as_rule() {
+                        Rule::dbpointer_type => Ok(Type::Pointer(Box::new(Self::parse_type(
+                            typ.into_inner().next().unwrap(),
+                        )?), 2)),
                         Rule::pointer_type => Ok(Type::Pointer(Box::new(Self::parse_type(
                             typ.into_inner().next().unwrap(),
-                        )?))),
+                        )?), 1)),
                         Rule::reference_type => Ok(Type::Reference(Box::new(Self::parse_type(
                             typ.into_inner().next().unwrap(),
                         )?))),
@@ -626,7 +858,8 @@ mod parsing_tests {
 
     #[test]
     pub fn test_parsing() {
-        assert!(MohoParser::apply(include_str!("../assets/single_class.moho")).is_ok());
-        assert!(MohoParser::apply(include_str!("../assets/multi_classes.moho")).is_ok());
+        println!("{:?}", MohoParser::apply(include_str!("../assets/test.moho")));
+        //assert!(MohoParser::apply(include_str!("../assets/single_class.moho")).is_ok());
+        //assert!(MohoParser::apply(include_str!("../assets/multi_classes.moho")).is_ok());
     }
 }

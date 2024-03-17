@@ -82,4 +82,12 @@ mod ast_tests {
         let p = MohoGrammar::parse(Rule::class, include_str!("../assets/multi_classes.moho"));
         assert!(p.is_ok());
     }
+
+    #[test]
+    fn parse_method() {
+        let p = MohoGrammar::parse(Rule::method_decl, "APawn* GetPlayerPawn(const UObject* WorldContextObject, 
+            int32 PlayerIndex);");
+        assert!(p.is_ok());
+        println!("{:?}", p);
+    }
 }
