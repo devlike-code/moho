@@ -85,4 +85,9 @@ pub fn copy_default_files(moho_path: &str) {
         append_to_path(moho_path, "type-template-string.txt"),
         include_str!("default/type-template-string.txt").to_owned(),
     );
+
+    write_file(
+        append_to_path(moho_path, "method-declaration-template.txt"),
+        include_str!("default/method-declaration-template.txt").to_owned(),
+    );
 }

@@ -8,7 +8,6 @@ use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
-    process::Command,
     thread,
 };
 
@@ -17,7 +16,8 @@ use defaults::copy_default_files;
 use dirs::config_dir;
 use output::{write_file, OutputTemplate, OutputWriter, StringWriter};
 use parser::{
-    Argument, Block, Class, Declaration, Field, Method, MohoParser, Property, TranslationUnit, Type, Value
+    Argument, Block, Class, Declaration, Field, Method, MohoParser, Property, TranslationUnit,
+    Type, Value,
 };
 use walkdir::WalkDir;
 
@@ -30,7 +30,7 @@ pub struct CmdArguments {
     pub run_path: String,
 
     #[clap(long, short, default_value_t = config_dir()
-        .map(|c| c.as_os_str().to_str().unwrap().to_string() + "\\.moho")
+        .map(|c| format!("{}{}.moho", c.as_os_str().to_str().unwrap().to_string(), std::path::MAIN_SEPARATOR))
         .unwrap_or(String::from(".")))]
     /// directory to find Moho config
     pub moho_path: String,
@@ -38,6 +38,9 @@ pub struct CmdArguments {
     #[clap(short, long, action, default_value_t = false)]
     /// open explorer to the moho config folder
     pub explore_configs: bool,
+
+    #[clap(short, long, action, default_value_t = false)]
+    pub copy_configs: bool,
 
     #[clap(short, long)]
     /// generate a class of this superclass from the command line
@@ -52,12 +55,16 @@ impl Default for CmdArguments {
     fn default() -> Self {
         Self {
             run_path: ".".into(),
-            moho_path: format!(
-                "{}\\.moho",
-                config_dir()
-                    .map(|c| c.as_os_str().to_str().unwrap().to_string() + "\\.moho")
-                    .unwrap_or(String::from("."))
-            ),
+            copy_configs: false,
+            moho_path: config_dir()
+                .map(|c| {
+                    format!(
+                        "{}{}.moho",
+                        c.as_os_str().to_str().unwrap().to_string(),
+                        std::path::MAIN_SEPARATOR
+                    )
+                })
+                .unwrap_or(String::from(".")),
             explore_configs: false,
             generate_class: None,
             new_class_name: None,
@@ -71,22 +78,33 @@ fn main() -> std::io::Result<()> {
     // Create moho directory if missing
     let moho_path = args.moho_path.clone();
     if std::fs::metadata(moho_path.as_str()).is_err() {
-        std::fs::create_dir(moho_path.as_str())?;
+        let _ = std::fs::create_dir(moho_path.as_str());
         copy_default_files(&moho_path);
+        println!("Copied default moho files to config path {}", moho_path);
+    }
+
+    if args.copy_configs {
+        let _ = std::fs::create_dir(moho_path.as_str());
+        copy_default_files(&moho_path);
+        println!("Copied default moho files to config path {}", moho_path);
     }
 
     // If exploring, open explorer and quit.
     if args.explore_configs {
-        Command::new("explorer")
-            .arg(args.moho_path)
-            .spawn()
-            .unwrap();
+        open::that(args.moho_path)?;
         return Ok(());
     }
 
     if let Some(class) = args.generate_class {
         println!("Creating class as a subclass of {}", class);
-        if std::fs::metadata(format!("{}\\{}.rhai", &moho_path, class)).is_err() {
+        if std::fs::metadata(format!(
+            "{}{}{}.rhai",
+            &moho_path,
+            std::path::MAIN_SEPARATOR,
+            class
+        ))
+        .is_err()
+        {
             println!("\n\tError: template {} not found. Quitting.", class);
             return Ok(());
         }
@@ -106,7 +124,12 @@ fn main() -> std::io::Result<()> {
         print!("Writing {}.moho... ", name);
         let _ = io::stdout().flush();
         let _ = fs::write(
-            format!("{}\\{}.moho", args.run_path, name),
+            format!(
+                "{}{}{}.moho",
+                args.run_path,
+                std::path::MAIN_SEPARATOR,
+                name
+            ),
             format!("class {} : {}\n{{\n\n}}\n", name, class),
         );
         println!("Done!");
@@ -141,7 +164,7 @@ fn main() -> std::io::Result<()> {
 
 fn append_to_path(p: impl Into<OsString>, s: impl AsRef<OsStr>) -> String {
     let mut p = p.into();
-    p.push("\\");
+    p.push(std::path::MAIN_SEPARATOR_STR);
     p.push(s);
     let pathbuf: PathBuf = p.into();
     pathbuf

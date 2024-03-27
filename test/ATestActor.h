@@ -19,7 +19,7 @@ private:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-private:
+protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Object References", Description="A nice long description goes here")
     AAnotherActor m_AnotherActor;
 

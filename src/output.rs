@@ -73,12 +73,12 @@ impl OutputWriter {
     }
 
     pub fn has_template(&mut self, temp: String) -> bool {
-        let file = format!("{}\\{}", self.config_path, temp);
+        let file = format!("{}{}{}", self.config_path, std::path::MAIN_SEPARATOR, temp);
         fs::metadata(file).is_ok()
     }
 
     pub fn template_from_file(&mut self, temp: String) -> OutputTemplate {
-        let file = format!("{}\\{}", self.config_path, temp);
+        let file = format!("{}{}{}", self.config_path, std::path::MAIN_SEPARATOR, temp);
         OutputTemplate {
             pattern: fs::read_to_string(file.clone())
                 .unwrap_or_else(|_| panic!("File not found {:?}", file)),
@@ -91,7 +91,10 @@ impl OutputWriter {
     }
 
     pub fn write_to(&mut self, path: String) {
-        write_file(format!("{}\\{}", self.output_path, path), self.get());
+        write_file(
+            format!("{}{}{}", self.output_path, std::path::MAIN_SEPARATOR, path),
+            self.get(),
+        );
     }
 
     pub fn clear(&mut self) {
