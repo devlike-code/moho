@@ -1,6 +1,6 @@
 # Moho
 
-Moho (spanish for "rust") is a rust-based code generator for creating Unreal Engine-specific C++ files.
+Moho is a code generator for creating Unreal Engine-specific C++ files. Rust-based, simple to use, will save you time.
 
 ## How it works
 
